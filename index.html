@@ -18,17 +18,7 @@ main>footer,footer,#kiosk>p{color:#ffe3c9}
 input,select{background:#fffaf2;border-color:#d8bca7;color:#4a302a}
 #toast{background:#79241e;color:#fff4df}
 
-</style>
-<style>
-/* Penanda absensi berdasarkan catatan shift hari ini */
-.badge.shift-working{background:#d8f5df;color:#12652f;border:1px solid #9bd7aa;font-weight:800}
-.badge.shift-waiting{background:#fff0bc;color:#795000;border:1px solid #e9d083;font-weight:800}
-.badge.shift-finished{background:#e3e3e3;color:#555;border:1px solid #c6c6c6;font-weight:800}
-.badge.shift-unknown{background:#f2e4d4;color:#745748}
-.actions button.is-working,.actions button.is-working:disabled{background:#16834a;color:#fff;opacity:1;cursor:default}
-.actions button.is-finished,.actions button.is-finished:disabled{background:#777;color:#fff;opacity:1;cursor:default}
-</style>
-</head><body>
+</style></head><body>
 <header><div><strong>lokalin.</strong><small>Employee attendance · Cafe management</small></div><button id="logout" class="secondary hidden">Keluar</button></header>
 <main>
 <section id="login" class="panel"><h1>Selamat datang</h1><p>Pilih akses untuk perangkat Lokalin Cafe.</p><div class="actions" style="margin-bottom:16px"><button type="button" id="chooseKiosk" class="primary">iPad Karyawan</button><button type="button" id="chooseOwner" class="secondary">Owner</button></div><div id="kioskLogin"><h2>iPad · Login Email & Password</h2><p class="muted">Masukkan email dan password akun iPad yang sudah terdaftar. Karyawan tidak perlu login ulang selama sesi tersimpan.</p><form id="kioskForm"><label>Email akun iPad</label><input id="kioskEmail" type="email" autocomplete="username" required placeholder="Email kiosk Supabase"><label>Password / PIN iPad</label><input id="kioskPin" type="password" autocomplete="current-password" required placeholder="PIN atau password akun iPad"><button id="kioskBtn" type="submit" class="primary" style="width:100%;margin-top:16px">Masuk ke iPad</button></form><p class="muted">PIN hanya untuk akun kiosk, bukan PIN setiap karyawan.</p></div><div id="ownerLogin" class="hidden"><h2>Login Owner</h2><form id="loginForm"><label>Email owner</label><input id="email" type="email" autocomplete="username" required><label>Password</label><input id="password" type="password" autocomplete="current-password" required><button id="loginBtn" type="submit" class="primary" style="width:100%;margin-top:16px">Masuk sebagai Owner</button></form></div><p id="loginError" role="alert" style="color:#a22f28"></p><p id="loginSuccess" role="status" style="color:#176b40"></p></section>
@@ -39,57 +29,21 @@ input,select{background:#fffaf2;border-color:#d8bca7;color:#4a302a}
 <script type="module">
 import {createClient} from 'https://esm.sh/@supabase/supabase-js@2';
 const db=createClient('https://kwhtqqrzeifmntdtugvg.supabase.co','sb_publishable_JGQ9jpXgEb3IMl0YjY3Txg_cQKy02Fs');
-const $=id=>document.getElementById(id);let role=null,employees=[],records=[],busy=false,shiftRecords=[],shiftStatusAvailable=false;
+const $=id=>document.getElementById(id);let role=null,employees=[],records=[],busy=false;
 const escapeHtml=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const dateWita=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Makassar',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
 function notify(s){$('toast').textContent=s;$('toast').style.display='block';setTimeout(()=>$('toast').style.display='none',4000)}
 function fail(e){notify(e?.message||String(e))}
 function showLoggedOut(){role=null;employees=[];records=[];$('login').classList.remove('hidden');$('app').classList.add('hidden');$('logout').classList.add('hidden')}
-function shiftStatusFor(empId){
-  if(!shiftStatusAvailable)return 'unknown';
-  const matching=shiftRecords.filter(r=>String(r.emp_id)===String(empId)&&r.shift===$('shift').value);
-  if(!matching.length)return 'waiting';
-  return matching.some(r=>r.jam_masuk&&!r.jam_pulang)?'working':'finished';
-}
-function updateShiftCards(){
-  if(role!=='kiosk')return;
-  for(const card of $('staff').querySelectorAll('[data-employee]')){
-    const status=shiftStatusFor(card.dataset.employee);
-    const badge=card.querySelector('[data-shift-status]');
-    const masuk=card.querySelector('[data-action="masuk"]');
-    const pulang=card.querySelector('[data-action="pulang"]');
-    badge.className='badge shift-'+status;
-    badge.textContent=({working:'Sedang Shift',waiting:'Belum Absen',finished:'Sudah Pulang',unknown:'Status belum tersedia'})[status];
-    masuk.classList.toggle('is-working',status==='working');
-    masuk.classList.toggle('is-finished',status==='finished');
-    masuk.textContent=status==='working'?'✓ Sedang Shift':status==='finished'?'Sudah Absen':'Absen Masuk';
-    masuk.disabled=status==='working'||status==='finished';
-    pulang.disabled=status!=='working'&&status!=='unknown';
-  }
-}
-async function loadShiftStatus(){
-  if(role!=='kiosk')return;
-  const {data,error}=await db.from('absensi_harian')
-    .select('emp_id,shift,jam_masuk,jam_pulang')
-    .eq('tanggal',dateWita());
-  if(error){
-    shiftStatusAvailable=false;
-    console.warn('Status shift tidak dapat dibaca:',error.message);
-  }else{
-    shiftRecords=data||[];
-    shiftStatusAvailable=true;
-  }
-  updateShiftCards();
-}
 function normalizeEmployee(e){return{id:String(e.id),name:String(e.name??e.nama??''),position:String(e.position??e.jabatan??e.role??''),active:e.active??e.is_active??true}}
-async function loadEmployees(){const {data,error}=await db.from('employees').select('*');if(error)throw new Error('Tidak dapat membaca daftar karyawan: '+error.message+'. Periksa kebijakan SELECT employees untuk akun kiosk/owner.');employees=(data||[]).map(normalizeEmployee).filter(e=>e.active&&e.name).sort((a,b)=>a.name.localeCompare(b.name));$('staff').innerHTML=employees.map(e=>`<article class="panel" data-employee="${escapeHtml(e.id)}"><div class="row"><div><b>${escapeHtml(e.name)}</b><div class="muted">${escapeHtml(e.position)}</div></div><span class="badge shift-unknown" data-shift-status>Status belum tersedia</span></div><div class="actions"><button class="primary" data-id="${escapeHtml(e.id)}" data-action="masuk">Absen Masuk</button><button class="secondary" data-id="${escapeHtml(e.id)}" data-action="pulang">Absen Pulang</button></div></article>`).join('');$('editEmp').innerHTML=employees.map(e=>`<option value="${escapeHtml(e.id)}">${escapeHtml(e.name)}</option>`).join('')}
-async function initialize(){const {data:{user},error}=await db.auth.getUser();if(error||!user){showLoggedOut();return}const {data:access,error:accessError}=await db.from('app_roles').select('role').eq('user_id',user.id).single();if(accessError||!['owner','kiosk'].includes(access?.role)){await db.auth.signOut();showLoggedOut();$('loginError').textContent='Akun tidak memiliki role owner/kiosk di app_roles.';return}role=access.role;$('login').classList.add('hidden');$('app').classList.remove('hidden');$('logout').classList.remove('hidden');$('kiosk').classList.toggle('hidden',role!=='kiosk');$('owner').classList.toggle('hidden',role!=='owner');$('role').textContent=role.toUpperCase();$('title').textContent=role==='owner'?'Dashboard Owner':'Absensi Karyawan';$('date').textContent=new Intl.DateTimeFormat('id-ID',{timeZone:'Asia/Makassar',dateStyle:'full'}).format(new Date());$('filterDate').value=dateWita();$('editDate').value=dateWita();try{await loadEmployees();if(role==='owner')await loadRecords();else await loadShiftStatus();$('status').textContent='Online · Supabase tersambung'}catch(e){$('status').textContent=e.message;fail(e)}}
+async function loadEmployees(){const {data,error}=await db.from('employees').select('*');if(error)throw new Error('Tidak dapat membaca daftar karyawan: '+error.message+'. Periksa kebijakan SELECT employees untuk akun kiosk/owner.');employees=(data||[]).map(normalizeEmployee).filter(e=>e.active&&e.name).sort((a,b)=>a.name.localeCompare(b.name));$('staff').innerHTML=employees.map(e=>`<article class="panel"><div class="row"><div><b>${escapeHtml(e.name)}</b><div class="muted">${escapeHtml(e.position)}</div></div><span class="badge">Aktif</span></div><div class="actions"><button class="primary" data-id="${escapeHtml(e.id)}" data-action="masuk">Absen Masuk</button><button class="secondary" data-id="${escapeHtml(e.id)}" data-action="pulang">Absen Pulang</button></div></article>`).join('');$('editEmp').innerHTML=employees.map(e=>`<option value="${escapeHtml(e.id)}">${escapeHtml(e.name)}</option>`).join('')}
+async function initialize(){const {data:{user},error}=await db.auth.getUser();if(error||!user){showLoggedOut();return}const {data:access,error:accessError}=await db.from('app_roles').select('role').eq('user_id',user.id).single();if(accessError||!['owner','kiosk'].includes(access?.role)){await db.auth.signOut();showLoggedOut();$('loginError').textContent='Akun tidak memiliki role owner/kiosk di app_roles.';return}role=access.role;$('login').classList.add('hidden');$('app').classList.remove('hidden');$('logout').classList.remove('hidden');$('kiosk').classList.toggle('hidden',role!=='kiosk');$('owner').classList.toggle('hidden',role!=='owner');$('role').textContent=role.toUpperCase();$('title').textContent=role==='owner'?'Dashboard Owner':'Absensi Karyawan';$('date').textContent=new Intl.DateTimeFormat('id-ID',{timeZone:'Asia/Makassar',dateStyle:'full'}).format(new Date());$('filterDate').value=dateWita();$('editDate').value=dateWita();try{await loadEmployees();if(role==='owner')await loadRecords();$('status').textContent='Online · Supabase tersambung'}catch(e){$('status').textContent=e.message;fail(e)}}
 function chooseLogin(mode){$('kioskLogin').classList.toggle('hidden',mode!=='kiosk');$('ownerLogin').classList.toggle('hidden',mode!=='owner');$('chooseKiosk').className=mode==='kiosk'?'primary':'secondary';$('chooseOwner').className=mode==='owner'?'primary':'secondary';$('loginError').textContent='';$('loginSuccess').textContent=''}
 $('chooseKiosk').onclick=()=>chooseLogin('kiosk');$('chooseOwner').onclick=()=>chooseLogin('owner');
 $('kioskForm').addEventListener('submit',async ev=>{ev.preventDefault();$('kioskBtn').disabled=true;$('loginError').textContent='';$('loginSuccess').textContent='';const {error}=await db.auth.signInWithPassword({email:$('kioskEmail').value.trim(),password:$('kioskPin').value});$('kioskBtn').disabled=false;$('kioskPin').value='';if(error){$('loginError').textContent='Email atau PIN tidak cocok. Pastikan password akun kiosk Supabase sudah disetel sesuai PIN.';return}await initialize();if(role!=='kiosk'){await db.auth.signOut();showLoggedOut();chooseLogin('kiosk');$('loginError').textContent='Akun ini bukan akun kiosk.'}});
 $('loginForm').addEventListener('submit',async ev=>{ev.preventDefault();$('loginBtn').disabled=true;$('loginError').textContent='';const {error}=await db.auth.signInWithPassword({email:$('email').value.trim(),password:$('password').value});$('loginBtn').disabled=false;if(error){$('loginError').textContent=error.message;return}$('password').value='';await initialize();if(role!=='owner'){await db.auth.signOut();showLoggedOut();chooseLogin('owner');$('loginError').textContent='Gunakan akun owner untuk login dengan password.'}});
 $('logout').onclick=async()=>{await db.auth.signOut();showLoggedOut()};
-$('staff').addEventListener('click',async ev=>{const button=ev.target.closest('button[data-action]');if(!button||busy)return;const emp=employees.find(e=>e.id===button.dataset.id);if(!emp)return;const action=button.dataset.action,shift=$('shift').value;if(!confirm(`${emp.name}: absen ${action} shift ${shift}?`))return;busy=true;button.disabled=true;try{const {data,error}=await db.rpc('lokalin_absen',{p_emp_id:emp.id,p_shift:shift,p_aksi:action});if(error)throw error;notify(`${emp.name} berhasil absen ${action}${data?.jam?' pukul '+data.jam:''}`);await loadShiftStatus()}catch(e){fail(e)}finally{busy=false;button.disabled=false}});
+$('staff').addEventListener('click',async ev=>{const button=ev.target.closest('button[data-action]');if(!button||busy)return;const emp=employees.find(e=>e.id===button.dataset.id);if(!emp)return;const action=button.dataset.action,shift=$('shift').value;if(!confirm(`${emp.name}: absen ${action} shift ${shift}?`))return;busy=true;button.disabled=true;try{const {data,error}=await db.rpc('lokalin_absen',{p_emp_id:emp.id,p_shift:shift,p_aksi:action});if(error)throw error;notify(`${emp.name} berhasil absen ${action}${data?.jam?' pukul '+data.jam:''}`)}catch(e){fail(e)}finally{busy=false;button.disabled=false}});
 async function loadRecords(){if(role!=='owner')return;const {data,error}=await db.from('absensi_harian').select('id,emp_id,nama,jabatan,tanggal,shift,jam_masuk,jam_pulang').order('tanggal',{ascending:false}).order('id',{ascending:false}).limit(1000);if(error)throw error;records=data||[];renderRecords()}
 function renderRecords(){const list=records.filter(r=>!$('filterDate').value||r.tanggal===$('filterDate').value);$('stats').textContent=`${list.length} catatan · ${list.filter(r=>r.jam_pulang).length} sudah pulang`;$('empty').classList.toggle('hidden',list.length>0);$('history').innerHTML=list.map(r=>`<tr><td>${escapeHtml(r.nama)}</td><td>${escapeHtml(r.tanggal)}</td><td>${escapeHtml(r.shift)}</td><td>${escapeHtml(r.jam_masuk||'—')}</td><td>${escapeHtml(r.jam_pulang||'—')}</td><td><button class="secondary" data-edit="${r.id}">Edit</button> <button class="danger" data-delete="${r.id}">Hapus</button></td></tr>`).join('')}
 $('filterDate').onchange=renderRecords;$('refresh').onclick=async()=>{try{await loadRecords();notify('Data diperbarui')}catch(e){fail(e)}};
@@ -97,8 +51,6 @@ $('history').addEventListener('click',async ev=>{const edit=ev.target.closest('[
 function clearEdit(){$('editForm').reset();$('editId').value='';$('editDate').value=dateWita()}$('resetEdit').onclick=clearEdit;
 $('editForm').addEventListener('submit',async ev=>{ev.preventDefault();if(busy)return;const emp=employees.find(e=>e.id===$('editEmp').value);if(!emp){notify('Karyawan tidak ditemukan');return}const payload={emp_id:emp.id,nama:emp.name,jabatan:emp.position,tanggal:$('editDate').value,shift:$('editShift').value,jam_masuk:$('editIn').value||null,jam_pulang:$('editOut').value||null};busy=true;try{const id=$('editId').value;const {error}=id?await db.from('absensi_harian').update(payload).eq('id',id):await db.from('absensi_harian').insert(payload);if(error)throw error;clearEdit();notify('Absensi tersimpan');await loadRecords()}catch(e){fail(e)}finally{busy=false}});
 $('export').onclick=()=>{const list=records.filter(r=>!$('filterDate').value||r.tanggal===$('filterDate').value);const cells=[['Nama','Jabatan','Tanggal','Shift','Masuk','Pulang'],...list.map(r=>[r.nama,r.jabatan,r.tanggal,r.shift,r.jam_masuk,r.jam_pulang])];const csv='\ufeff'+cells.map(row=>row.map(v=>'"'+String(v??'').replaceAll('"','""')+'"').join(',')).join('\r\n');const url=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));const a=document.createElement('a');a.href=url;a.download='lokalin-absensi-'+($('filterDate').value||'semua')+'.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)};
-$('shift').addEventListener('change',updateShiftCards);
-setInterval(()=>{if(role==='kiosk'&&!busy)loadShiftStatus().catch(console.warn)},30000);
 db.auth.onAuthStateChange((event)=>{if(event==='SIGNED_IN')setTimeout(()=>initialize(),0)});initialize();
 </script></body></html>
 
