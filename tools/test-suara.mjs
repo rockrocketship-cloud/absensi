@@ -60,8 +60,13 @@ delete global.window.speechSynthesis;
 cek('tanpa TTS & tanpa klip: diam', await ucapkan('Wasih','masuk'), 'diam');
 global.window.speechSynthesis = simpan;
 
-// 7. panaskan() & pramuat() aman dipanggil
-panaskan(); panaskan();
+// 7. panaskan() membuka izin dengan kata nyata, bukan volume 0
+const sebelum = spoken.length;
+panaskan();
+cek('panaskan pakai kata nyata', spoken.at(-1), 'Siap');
+cek('panaskan hanya sekali', (panaskan(), spoken.length), sebelum + 1);
+
+// 8. panaskan() & pramuat() aman dipanggil
 pramuat(['Ardi','Junaedi','Ilham','Wasih','Lilis','Pipit']);
 cek('panaskan/pramuat tidak melempar', true, true);
 
