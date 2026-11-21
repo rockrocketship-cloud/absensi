@@ -53,9 +53,21 @@ export function panaskan() {
     a.play().catch(() => {});
   } catch (_) {}
   try {
-    const u = new SpeechSynthesisUtterance(' ');
-    u.volume = 0;
+    // Jangan membuka izin dengan utterance volume 0: di Safari iOS volume nol
+    // bisa menetap, sehingga setiap ucapan sesudahnya ikut bisu padahal API
+    // melaporkan sukses. Satu kata pendek bervolume normal tidak punya efek
+    // samping itu.
+    const u = new SpeechSynthesisUtterance('Siap');
+    u.lang = 'id-ID';
+    if (suaraID) u.voice = suaraID;
     speechSynthesis.speak(u);
+  } catch (_) {}
+  // Safari dan Chrome menidurkan mesin ucapan pada halaman yang dibiarkan
+  // terbuka lama; resume() berkala menjaganya tetap siap.
+  try {
+    setInterval(() => {
+      try { if (!speechSynthesis.speaking) speechSynthesis.resume(); } catch (_) {}
+    }, 10000);
   } catch (_) {}
 }
 
@@ -89,7 +101,8 @@ function putarKlip(path) {
 function putarTTS(teks) {
   if (!('speechSynthesis' in window)) return false;
   try {
-    speechSynthesis.cancel();
+    if (!suaraID) pilihSuaraID();        // daftar suara kadang terisi belakangan
+    try { speechSynthesis.resume(); } catch (_) {}
     const u = new SpeechSynthesisUtterance(teks);
     u.lang = 'id-ID';
     if (suaraID) u.voice = suaraID;
