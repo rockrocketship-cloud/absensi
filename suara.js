@@ -10,29 +10,35 @@
 //   panaskan();                        // di handler tombol pertama (wajib di iOS)
 //   await ucapkan('Lilis', 'masuk');   // setelah absen tersimpan ke Supabase
 
-const BASE = './audio';           // folder hasil pregen.py
-const EXT = '.wav';               // ganti '.mp3' kalau sudah dikonversi
+const BASE = './audio'; // folder hasil pregen.py
+const EXT = '.wav'; // ganti '.mp3' kalau sudah dikonversi
 
 const TEKS = {
-  masuk:     n => `${n} sudah absen masuk`,
-  keluar:    n => `${n} sudah absen keluar`,
-  terlambat: n => `${n} tercatat terlambat`,
-  gagal:     () => 'Absen gagal, silakan coba lagi',
+  masuk: (n) => `${n} sudah absen masuk`,
+  keluar: (n) => `${n} sudah absen keluar`,
+  terlambat: (n) => `${n} tercatat terlambat`,
+  gagal: () => 'Absen gagal, silakan coba lagi',
 };
 
-const slug = s => s.normalize('NFKD').replace(/[̀-ͯ]/g, '')
-  .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+const slug = (s) =>
+  s
+    .normalize('NFKD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '');
 
-const cache = new Map();          // path -> HTMLAudioElement siap pakai
+const cache = new Map(); // path -> HTMLAudioElement siap pakai
 let suaraID = null;
 let siap = false;
 
 function pilihSuaraID() {
   if (!('speechSynthesis' in window)) return;
   const v = speechSynthesis.getVoices();
-  suaraID = v.find(x => x.lang === 'id-ID')
-         || v.find(x => x.lang && x.lang.toLowerCase().startsWith('id'))
-         || null;
+  suaraID =
+    v.find((x) => x.lang === 'id-ID') ||
+    v.find((x) => x.lang && x.lang.toLowerCase().startsWith('id')) ||
+    null;
 }
 
 if ('speechSynthesis' in window) {
@@ -66,7 +72,9 @@ export function panaskan() {
   // terbuka lama; resume() berkala menjaganya tetap siap.
   try {
     setInterval(() => {
-      try { if (!speechSynthesis.speaking) speechSynthesis.resume(); } catch (_) {}
+      try {
+        if (!speechSynthesis.speaking) speechSynthesis.resume();
+      } catch (_) {}
     }, 10000);
   } catch (_) {}
 }
@@ -87,22 +95,36 @@ export function pramuat(namaList, aksiList = ['masuk', 'keluar']) {
 function putarKlip(path) {
   return new Promise((resolve, reject) => {
     let el = cache.get(path);
-    if (!el) { el = new Audio(path); cache.set(path, el); }
+    if (!el) {
+      el = new Audio(path);
+      cache.set(path, el);
+    }
     const bersih = () => {
       el.onended = el.onerror = null;
     };
-    el.onended = () => { bersih(); resolve(true); };
-    el.onerror = () => { bersih(); reject(new Error('klip tidak ada: ' + path)); };
+    el.onended = () => {
+      bersih();
+      resolve(true);
+    };
+    el.onerror = () => {
+      bersih();
+      reject(new Error('klip tidak ada: ' + path));
+    };
     el.currentTime = 0;
-    el.play().catch(e => { bersih(); reject(e); });
+    el.play().catch((e) => {
+      bersih();
+      reject(e);
+    });
   });
 }
 
 function putarTTS(teks) {
   if (!('speechSynthesis' in window)) return false;
   try {
-    if (!suaraID) pilihSuaraID();        // daftar suara kadang terisi belakangan
-    try { speechSynthesis.resume(); } catch (_) {}
+    if (!suaraID) pilihSuaraID(); // daftar suara kadang terisi belakangan
+    try {
+      speechSynthesis.resume();
+    } catch (_) {}
     const u = new SpeechSynthesisUtterance(teks);
     u.lang = 'id-ID';
     if (suaraID) u.voice = suaraID;
@@ -120,9 +142,7 @@ function putarTTS(teks) {
  */
 export async function ucapkan(nama, aksi) {
   const teks = (TEKS[aksi] || TEKS.masuk)(nama);
-  const path = aksi === 'gagal'
-    ? `${BASE}/gagal${EXT}`
-    : `${BASE}/${slug(nama)}-${aksi}${EXT}`;
+  const path = aksi === 'gagal' ? `${BASE}/gagal${EXT}` : `${BASE}/${slug(nama)}-${aksi}${EXT}`;
 
   try {
     await putarKlip(path);
